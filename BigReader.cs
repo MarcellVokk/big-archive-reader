@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BigReader
+namespace BFME_API_Client.Utilities
 {
     public static class BigReader
     {
@@ -12,10 +13,7 @@ namespace BigReader
         {
             Dictionary<string, BigFile> files = new Dictionary<string, BigFile>();
 
-            List<(uint size, string name)> index = new List<(uint size, string name)>();
-
-            using (var stream = new FileStream(bigArchive, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (var reader = new BinaryReader(stream, Encoding.UTF8, true))
+            using (var reader = new BinaryReader(new FileStream(bigArchive, FileMode.Open, FileAccess.Read, FileShare.ReadWrite), Encoding.UTF8, false))
             {
                 var header = reader.ReadFixedLengthString(4);
                 var file_size = reader.ReadUInt32();
@@ -28,18 +26,7 @@ namespace BigReader
                     var embeded_file_size = reader.ReadUInt32_BigEndian();
                     var embeded_file_name = reader.ReadNullTerminatedString();
 
-                    index.Add((embeded_file_size, embeded_file_name));
-                }
-
-                while (true)
-                {
-                    var curent_file = index.First();
-                    index.RemoveAt(0);
-
-                    files.Add(curent_file.name, new BigFile(curent_file.name, reader.ReadBytes((int)curent_file.size)));
-
-                    if (index.Count == 0)
-                        break;
+                    files.Add(embeded_file_name, new BigFile(embeded_file_name, bigArchive, (int)embeded_file_offset, (int)embeded_file_size));
                 }
             }
 
@@ -80,14 +67,24 @@ namespace BigReader
     public struct BigFile
     {
         public string Name { get; set; }
-        public byte[] Data { get; set; }
+        public string Source { get; set; }
+        public int Offset { get; set; }
+        public int Size { get; set; }
 
-        public BigFile(string name, byte[] data)
+        public BigFile(string name, string source, int offset, int size)
         {
             Name = name;
-            Data = data;
+            Source = source;
+            Offset = offset;
+            Size = size;
         }
 
-        public string GetText() => Encoding.UTF8.GetString(Data);
+        public byte[] GetData()
+        {
+            byte[] data = File.ReadAllBytes(Source);
+            return data.Skip(Offset).Take(Size).ToArray();
+        }
+
+        public string GetText() => Encoding.UTF8.GetString(GetData());
     }
 }
